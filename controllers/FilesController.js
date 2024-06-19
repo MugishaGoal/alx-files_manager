@@ -20,9 +20,7 @@ class FilesController {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const {
-      name, type, parentId = 0, isPublic = false, data,
-    } = req.body;
+    const { name, type, parentId = 0, isPublic = false, data } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'Missing name' });
@@ -67,6 +65,28 @@ class FilesController {
     return res.status(201).json(newFile);
   }
 
+  static async getShow(req, res) {
+    const token = req.header('X-Token');
+    if (!token) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const key = `auth_${token}`;
+    const userId = await redisClient.get(key);
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const fileId = req.params.id;
+    const file = await dbClient.filesCollection().findOne({ _id: new dbClient.ObjectID(fileId), userId });
+
+    if (!file) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    return res.json(file);
+  }
+
   static async getIndex(req, res) {
     const token = req.header('X-Token');
     if (!token) {
@@ -90,6 +110,58 @@ class FilesController {
     ]).toArray();
 
     return res.json(files);
+  }
+
+  static async putPublish(req, res) {
+    const token = req.header('X-Token');
+    if (!token) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const key = `auth_${token}`;
+    const userId = await redisClient.get(key);
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const fileId = req.params.id;
+    const file = await dbClient.filesCollection().findOneAndUpdate(
+      { _id: new dbClient.ObjectID(fileId), userId },
+      { $set: { isPublic: true } },
+      { returnOriginal: false }
+    );
+
+    if (!file.value) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    return res.status(200).json(file.value);
+  }
+
+  static async putUnpublish(req, res) {
+    const token = req.header('X-Token');
+    if (!token) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const key = `auth_${token}`;
+    const userId = await redisClient.get(key);
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const fileId = req.params.id;
+    const file = await dbClient.filesCollection().findOneAndUpdate(
+      { _id: new dbClient.ObjectID(fileId), userId },
+      { $set: { isPublic: false } },
+      { returnOriginal: false }
+    );
+
+    if (!file.value) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    return res.status(200).json(file.value);
   }
 }
 
