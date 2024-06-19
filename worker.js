@@ -6,6 +6,22 @@ import dbClient from '../utils/db';
 
 const FOLDER_PATH = process.env.FOLDER_PATH || '/tmp/files_manager';
 const fileQueue = new Bull('fileQueue');
+const userQueue = new Queue('userQueue');
+
+userQueue.process(async (job, done) => {
+  const { userId } = job.data;
+
+  if (!userId) {
+    return done(new Error('Missing userId'));
+  }
+
+  const user = await dbClient.usersCollection().findOne({ _id: userId });
+  if (!user) {
+    return done(new Error('User not found'));
+  }
+
+  console.log(`Welcome ${user.email}!`);
+  done();
 
 fileQueue.process(async (job, done) => {
   const { userId, fileId } = job.data;
