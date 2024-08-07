@@ -1,12 +1,13 @@
 import sha1 from 'sha1';
-import Queue from 'bull';
+import Queue from 'bull/lib/queue';
 import dbClient from '../utils/db';
 
 const userQueue = new Queue('email sending');
 
-class UsersController {
+export default class UsersController {
   static async postNew(req, res) {
-    const { email, password } = req.body;
+    const email = req.body ? req.body.email : null;
+    const password = req.body ? req.body.password : null;
 
     if (!email) {
       res.status(400).json({ error: 'Missing email' });
@@ -16,47 +17,23 @@ class UsersController {
       res.status(400).json({ error: 'Missing password' });
       return;
     }
+    const user = await (await dbClient.usersCollection()).findOne({ email });
 
-    const userExists = await dbClient.usersCollection().findOne({ email });
-
-    if (userExists) {
+    if (user) {
       res.status(400).json({ error: 'Already exist' });
       return;
     }
-
-    const hashedPassword = sha1(password);
-    const newUser = {
-      email,
-      password: hashedPassword,
-    };
-
-    const result = await dbClient.usersCollection().insertOne(newUser);
-    const userId = result.insertedId.toString();
+    const insertionInfo = await (await dbClient.usersCollection())
+      .insertOne({ email, password: sha1(password) });
+    const userId = insertionInfo.insertedId.toString();
 
     userQueue.add({ userId });
     res.status(201).json({ email, id: userId });
   }
 
   static async getMe(req, res) {
-    const token = req.header('X-Token');
-    if (!token) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const key = `auth_${token}`;
-    const userId = await redisClient.get(key);
-
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const user = await dbClient.usersCollection().findOne({ _id: new dbClient.ObjectID(userId) });
-    if (!user) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
+    const { user } = req;
 
     res.status(200).json({ email: user.email, id: user._id.toString() });
   }
 }
-
-export default UsersController;
